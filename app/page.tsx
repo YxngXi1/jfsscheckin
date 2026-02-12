@@ -1,7 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import studentsSeed from "../utils/data";
+import { useEffect, useMemo, useState } from "react";
 
 type Student = {
   name: string;
@@ -10,9 +9,36 @@ type Student = {
 };
 
 export default function Home() {
-  const [students, setStudents] = useState<Student[]>(studentsSeed);
+  const [students, setStudents] = useState<Student[]>([]);
   const [query, setQuery] = useState("");
   const [selectedNumber, setSelectedNumber] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isCheckingIn, setIsCheckingIn] = useState(false);
+
+  useEffect(() => {
+    const loadStudents = async () => {
+      try {
+        setIsLoading(true);
+        setErrorMessage(null);
+
+        const response = await fetch("/api/students", { cache: "no-store" });
+
+        if (!response.ok) {
+          throw new Error("Failed to load students");
+        }
+
+        const data = (await response.json()) as { students: Student[] };
+        setStudents(data.students);
+      } catch {
+        setErrorMessage("Could not load students from database.");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    void loadStudents();
+  }, []);
 
   const filtered = useMemo(() => {
     const trimmed = query.trim();
@@ -26,7 +52,10 @@ export default function Home() {
 
   const selectedStudent = useMemo(() => {
     if (!selectedNumber) return null;
-    return students.find((student) => student.studentNumber === selectedNumber) || null;
+    return (
+      students.find((student) => student.studentNumber === selectedNumber) ||
+      null
+    );
   }, [selectedNumber, students]);
 
   const handleExactSearch = (value: string) => {
@@ -40,17 +69,53 @@ export default function Home() {
     }
   };
 
-  const handleCheckIn = () => {
-    if (!selectedStudent) return;
-    if (!selectedStudent.checkIn) return;
-    setStudents((prev) =>
-      prev.map((student) =>
-        student.studentNumber === selectedStudent.studentNumber
-          ? { ...student, checkIn: false }
-          : student
-      )
-    );
-    setSelectedNumber(null);
+  const handleCheckIn = async () => {
+    if (!selectedStudent || selectedStudent.checkIn || isCheckingIn) return;
+
+    try {
+      setIsCheckingIn(true);
+      setErrorMessage(null);
+
+      const response = await fetch(
+        `/api/students/${selectedStudent.studentNumber}/check-in`,
+        {
+          method: "PATCH",
+        }
+      );
+
+      const data = (await response.json()) as {
+        status: "checked_in" | "already_checked_in" | "not_found";
+        student?: Student;
+        error?: string;
+      };
+
+      if (data.status === "not_found") {
+        setErrorMessage("Student not found.");
+        return;
+      }
+
+      if (data.student) {
+        setStudents((prev) =>
+          prev.map((student) =>
+            student.studentNumber === data.student?.studentNumber
+              ? data.student
+              : student
+          )
+        );
+      }
+
+      if (data.status === "already_checked_in") {
+        setErrorMessage(
+          "This student was already checked in from another device."
+        );
+      } else {
+        setSelectedNumber(null);
+      }
+    } catch {
+      setErrorMessage("Could not complete check-in.");
+    } finally {
+      setIsCheckingIn(false);
+    }
   };
 
   return (
@@ -66,6 +131,9 @@ export default function Home() {
           <p className="max-w-2xl text-base text-blue-100">
             Type a student number to filter. Press Enter for an exact match.
           </p>
+          {errorMessage ? (
+            <p className="text-sm text-rose-300">{errorMessage}</p>
+          ) : null}
         </header>
 
         <section className="grid gap-8 lg:grid-cols-[1.4fr_1fr]">
@@ -116,36 +184,42 @@ export default function Home() {
                 <span>{filtered.length} students</span>
               </div>
               <div className="grid gap-3">
-                {filtered.map((student) => (
-                  <button
-                    key={student.studentNumber}
-                    className={`flex w-full items-center justify-between rounded-2xl border px-5 py-4 text-left transition ${
-                      selectedStudent?.studentNumber === student.studentNumber
-                        ? "border-sky-400 bg-sky-400/10"
-                        : "border-blue-800/80 bg-blue-950/60 hover:border-blue-500"
-                    }`}
-                    onClick={() => setSelectedNumber(student.studentNumber)}
-                    type="button"
-                  >
-                    <div>
-                      <p className="text-lg font-semibold text-blue-50">
-                        {student.name}
-                      </p>
-                      <p className="text-sm text-blue-200/80">
-                        #{student.studentNumber}
-                      </p>
-                    </div>
-                    <span
-                      className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wider ${
-                        student.checkIn
-                          ? "bg-emerald-400/20 text-emerald-200"
-                          : "bg-rose-500/20 text-rose-200"
+                {isLoading ? (
+                  <p className="rounded-2xl border border-blue-800/80 bg-blue-950/60 px-5 py-4 text-sm text-blue-200/80">
+                    Loading students...
+                  </p>
+                ) : (
+                  filtered.map((student) => (
+                    <button
+                      key={student.studentNumber}
+                      className={`flex w-full items-center justify-between rounded-2xl border px-5 py-4 text-left transition ${
+                        selectedStudent?.studentNumber === student.studentNumber
+                          ? "border-sky-400 bg-sky-400/10"
+                          : "border-blue-800/80 bg-blue-950/60 hover:border-blue-500"
                       }`}
+                      onClick={() => setSelectedNumber(student.studentNumber)}
+                      type="button"
                     >
-                      {student.checkIn ? "Not Checked In" : "Checked In"}
-                    </span>
-                  </button>
-                ))}
+                      <div>
+                        <p className="text-lg font-semibold text-blue-50">
+                          {student.name}
+                        </p>
+                        <p className="text-sm text-blue-200/80">
+                          #{student.studentNumber}
+                        </p>
+                      </div>
+                      <span
+                        className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wider ${
+                          !student.checkIn
+                            ? "bg-emerald-400/20 text-emerald-200"
+                            : "bg-rose-500/20 text-rose-200"
+                        }`}
+                      >
+                        {student.checkIn ? "Checked In" : "Not Checked In"}
+                      </span>
+                    </button>
+                  ))
+                )}
               </div>
             </div>
           </div>
@@ -171,21 +245,25 @@ export default function Home() {
                     </p>
                     <p className="mt-2 text-lg text-blue-50">
                       {selectedStudent.checkIn
-                        ? "Eligible to check in"
-                        : "Already checked in"}
+                        ? "Already checked in"
+                        : "Eligible to check in"}
                     </p>
                   </div>
                   <button
                     className={`w-full rounded-xl py-3 text-sm font-semibold uppercase tracking-wider transition ${
-                      selectedStudent.checkIn
+                      !selectedStudent.checkIn
                         ? "bg-sky-400 text-blue-950 hover:bg-sky-300"
                         : "cursor-not-allowed bg-blue-900/60 text-blue-200/50"
                     }`}
-                    onClick={handleCheckIn}
-                    disabled={!selectedStudent.checkIn}
+                    onClick={() => void handleCheckIn()}
+                    disabled={selectedStudent.checkIn || isCheckingIn}
                     type="button"
                   >
-                    {selectedStudent.checkIn ? "Check In Student" : "Checked In"}
+                    {!selectedStudent.checkIn
+                      ? isCheckingIn
+                        ? "Checking In..."
+                        : "Check In Student"
+                      : "Checked In"}
                   </button>
                 </div>
               ) : (
@@ -221,12 +299,12 @@ export default function Home() {
                       </div>
                       <span
                         className={`rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-wider ${
-                          student.checkIn
+                          !student.checkIn
                             ? "bg-emerald-400/20 text-emerald-200"
                             : "bg-rose-500/20 text-rose-200"
                         }`}
                       >
-                        {student.checkIn ? "Not Checked In" : "Checked In"}
+                        {student.checkIn ? "Checked In" : "Not Checked In"}
                       </span>
                     </div>
                   ))}
