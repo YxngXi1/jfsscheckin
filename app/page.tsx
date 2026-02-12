@@ -13,13 +13,17 @@ export default function Home() {
   const [query, setQuery] = useState("");
   const [selectedNumber, setSelectedNumber] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isCheckingIn, setIsCheckingIn] = useState(false);
 
   useEffect(() => {
-    const loadStudents = async () => {
+    const loadStudents = async (showLoading: boolean) => {
       try {
-        setIsLoading(true);
+        setIsRefreshing(true);
+        if (showLoading) {
+          setIsLoading(true);
+        }
         setErrorMessage(null);
 
         const response = await fetch("/api/students", { cache: "no-store" });
@@ -33,11 +37,22 @@ export default function Home() {
       } catch {
         setErrorMessage("Could not load students from database.");
       } finally {
-        setIsLoading(false);
+        setIsRefreshing(false);
+        if (showLoading) {
+          setIsLoading(false);
+        }
       }
     };
 
-    void loadStudents();
+    void loadStudents(true);
+
+    const intervalId = setInterval(() => {
+      void loadStudents(false);
+    }, 60_000);
+
+    return () => {
+      clearInterval(intervalId);
+    };
   }, []);
 
   const filtered = useMemo(() => {
@@ -122,6 +137,9 @@ export default function Home() {
     <div className="min-h-screen bg-[#07164a] text-slate-100">
       <main className="mx-auto flex w-full max-w-6xl flex-col gap-10 px-6 py-12">
         <header className="space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-[0.3em] text-blue-300">
+            {isRefreshing ? "Refreshing..." : "Up to date"}
+          </p>
           <p className="text-sm uppercase tracking-[0.4em] text-blue-200">
             Student Check-In
           </p>
