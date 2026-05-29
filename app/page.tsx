@@ -274,6 +274,9 @@ export default function Home() {
                     <p className="text-2xl font-semibold text-blue-50">
                       {selectedStudent.fullName}
                     </p>
+                    <p className="text-sm text-blue-200/70">
+                      First: {selectedStudent.firstName || "-"} · Last: {selectedStudent.lastName || "-"}
+                    </p>
                     <p className="text-sm text-blue-200/80">
                       {selectedStudent.grade ? `Grade ${selectedStudent.grade}` : "Grade not set"} · Student #{selectedStudent.studentNumber}
                     </p>
@@ -339,6 +342,9 @@ export default function Home() {
                       <div>
                         <p className="text-sm font-semibold text-blue-50">
                           {student.fullName}
+                        </p>
+                        <p className="text-xs text-blue-200/70">
+                          First: {student.firstName || "-"} · Last: {student.lastName || "-"}
                         </p>
                         <p className="text-xs text-blue-200/80">
                           {student.grade ? `Grade ${student.grade}` : "Grade not set"} · #{student.studentNumber}

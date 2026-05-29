@@ -4,6 +4,21 @@ import { parseStudentsFromWorkbookBuffer } from "@/lib/student-import.js";
 
 export const runtime = "nodejs";
 
+type ImportedStudent = {
+  firstName: string;
+  lastName: string;
+  fullName: string;
+  studentNumber: string;
+  grade: string;
+  checkIn: boolean;
+};
+
+function isImportedStudent(
+  student: ImportedStudent | null
+): student is ImportedStudent {
+  return student !== null;
+}
+
 export async function POST(request: Request) {
   try {
     const formData = await request.formData();
@@ -18,7 +33,7 @@ export async function POST(request: Request) {
 
     const students = parseStudentsFromWorkbookBuffer(
       Buffer.from(await file.arrayBuffer())
-    );
+    ).filter(isImportedStudent);
 
     if (!students.length) {
       return NextResponse.json(
