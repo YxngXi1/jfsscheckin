@@ -3,8 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 
 type Student = {
-  name: string;
+  firstName: string;
+  lastName: string;
+  fullName: string;
   studentNumber: string;
+  grade: string;
   checkIn: boolean;
 };
 
@@ -17,33 +20,33 @@ export default function Home() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isCheckingIn, setIsCheckingIn] = useState(false);
 
-  useEffect(() => {
-    const loadStudents = async (showLoading: boolean) => {
-      try {
-        setIsRefreshing(true);
-        if (showLoading) {
-          setIsLoading(true);
-        }
-        setErrorMessage(null);
-
-        const response = await fetch("/api/students", { cache: "no-store" });
-
-        if (!response.ok) {
-          throw new Error("Failed to load students");
-        }
-
-        const data = (await response.json()) as { students: Student[] };
-        setStudents(data.students);
-      } catch {
-        setErrorMessage("Could not load students from database.");
-      } finally {
-        setIsRefreshing(false);
-        if (showLoading) {
-          setIsLoading(false);
-        }
+  const loadStudents = async (showLoading: boolean) => {
+    try {
+      setIsRefreshing(true);
+      if (showLoading) {
+        setIsLoading(true);
       }
-    };
+      setErrorMessage(null);
 
+      const response = await fetch("/api/students", { cache: "no-store" });
+
+      if (!response.ok) {
+        throw new Error("Failed to load students");
+      }
+
+      const data = (await response.json()) as { students: Student[] };
+      setStudents(data.students);
+    } catch {
+      setErrorMessage("Could not load students from database.");
+    } finally {
+      setIsRefreshing(false);
+      if (showLoading) {
+        setIsLoading(false);
+      }
+    }
+  };
+
+  useEffect(() => {
     void loadStudents(true);
 
     const intervalId = setInterval(() => {
@@ -60,8 +63,12 @@ export default function Home() {
     if (!trimmed) {
       return students;
     }
+
+    const normalized = trimmed.toLowerCase();
     return students.filter((student) =>
-      student.studentNumber.includes(trimmed)
+      [student.studentNumber, student.fullName, student.firstName, student.lastName].some((value) =>
+        value.toLowerCase().includes(normalized)
+      )
     );
   }, [query, students]);
 
@@ -76,9 +83,15 @@ export default function Home() {
   const handleExactSearch = (value: string) => {
     const trimmed = value.trim();
     if (!trimmed) return;
+
+    const normalized = trimmed.toLowerCase();
     const exactMatch = students.find(
-      (student) => student.studentNumber === trimmed
+      (student) =>
+        student.studentNumber === trimmed ||
+        student.fullName.toLowerCase() === normalized ||
+        `${student.firstName} ${student.lastName}`.trim().toLowerCase() === normalized
     );
+
     if (exactMatch) {
       setSelectedNumber(exactMatch.studentNumber);
     }
@@ -144,10 +157,11 @@ export default function Home() {
             Student Check-In
           </p>
           <h1 className="text-4xl font-semibold text-blue-50">
-            SAC SEMI CHECK IN
+            SAC VOTING CHECK IN
           </h1>
           <p className="max-w-2xl text-base text-blue-100">
-            Type a student number to filter. Press Enter for an exact match.
+            Upload the spreadsheet, then search by student number or student
+            name. Press Enter for an exact match.
           </p>
           {errorMessage ? (
             <p className="text-sm text-rose-300">{errorMessage}</p>
@@ -158,21 +172,28 @@ export default function Home() {
           <div className="space-y-6">
             <div className="rounded-2xl border border-blue-700/80 bg-blue-950/60 p-6 shadow-lg">
               <label className="text-xs font-semibold uppercase tracking-[0.3em] text-blue-200">
-                Student Number
+                Student Search
               </label>
               <div className="mt-3 flex items-center gap-3">
                 <input
                   className="w-full rounded-xl border border-blue-700/80 bg-[#050a24] px-4 py-3 text-lg text-blue-50 outline-none transition focus:border-sky-400"
-                  placeholder="Type a student number"
+                  placeholder="Type a student number or name"
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
                   onKeyDown={(event) => {
                     if (event.key === "Enter") {
                       const value = event.currentTarget.value;
                       const trimmed = value.trim();
+                      const normalized = trimmed.toLowerCase();
                       const exactMatch = students.find(
-                        (student) => student.studentNumber === trimmed
+                        (student) =>
+                          student.studentNumber === trimmed ||
+                          student.fullName.toLowerCase() === normalized ||
+                          `${student.firstName} ${student.lastName}`
+                            .trim()
+                            .toLowerCase() === normalized
                       );
+
                       if (exactMatch) {
                         setSelectedNumber(exactMatch.studentNumber);
                       } else if (filtered.length === 1) {
@@ -220,10 +241,10 @@ export default function Home() {
                     >
                       <div>
                         <p className="text-lg font-semibold text-blue-50">
-                          {student.name}
+                          {student.fullName}
                         </p>
                         <p className="text-sm text-blue-200/80">
-                          #{student.studentNumber}
+                          {student.grade ? `Grade ${student.grade}` : "Grade not set"} · #{student.studentNumber}
                         </p>
                       </div>
                       <span
@@ -251,10 +272,18 @@ export default function Home() {
                 <div className="mt-4 space-y-4">
                   <div>
                     <p className="text-2xl font-semibold text-blue-50">
-                      {selectedStudent.name}
+                      {selectedStudent.fullName}
                     </p>
                     <p className="text-sm text-blue-200/80">
-                      Student #{selectedStudent.studentNumber}
+                      {selectedStudent.grade ? `Grade ${selectedStudent.grade}` : "Grade not set"} · Student #{selectedStudent.studentNumber}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-blue-700/80 bg-[#050a24] p-4">
+                    <p className="text-xs uppercase tracking-[0.3em] text-blue-200/80">
+                      Student Number
+                    </p>
+                    <p className="mt-2 text-lg text-blue-50">
+                      #{selectedStudent.studentNumber}
                     </p>
                   </div>
                   <div className="rounded-2xl border border-blue-700/80 bg-[#050a24] p-4">
@@ -309,10 +338,10 @@ export default function Home() {
                     >
                       <div>
                         <p className="text-sm font-semibold text-blue-50">
-                          {student.name}
+                          {student.fullName}
                         </p>
                         <p className="text-xs text-blue-200/80">
-                          #{student.studentNumber}
+                          {student.grade ? `Grade ${student.grade}` : "Grade not set"} · #{student.studentNumber}
                         </p>
                       </div>
                       <span
